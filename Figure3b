@@ -1,0 +1,128 @@
+import pandas as pd
+import numpy as np
+from scipy.stats import f_oneway
+from google.colab import files
+import matplotlib.pyplot as plt
+
+# Data for Clusters
+cluster_data = {
+    'Cluster': ['Cluster 0', 'Cluster 3', 'Healthy'],
+    'Population': [345, 231, 1887],
+    'Cancer_Prevalence': [0.14, 0.09, 0.02],
+    'Screening_Cost_Per_Person': [30, 30, 30],
+    'Early_Detection_Saving_Per_Case': [20000, 20000, 20000]
+}
+
+# Convert to DataFrame
+cluster_df = pd.DataFrame(cluster_data)
+
+# Cost calculations for each cluster
+cluster_df['Screening_Cost'] = cluster_df['Population'] * cluster_df['Screening_Cost_Per_Person']
+cluster_df['Detected_Cancers'] = cluster_df['Population'] * cluster_df['Cancer_Prevalence']
+cluster_df['Detection_Savings'] = cluster_df['Detected_Cancers'] * cluster_df['Early_Detection_Saving_Per_Case']
+cluster_df['Net_Savings'] = cluster_df['Detection_Savings'] - cluster_df['Screening_Cost']
+
+# Save results and download
+cluster_df.to_csv('cluster_cost_analysis.csv', index=False)
+files.download('cluster_cost_analysis.csv')
+
+# Parameters for scenario analysis
+screening_cost_per_person = [20, 30, 40]
+early_detection_saving_per_case = [15000, 20000, 25000]
+cluster_0_cancer_risk = [0.10, 0.14, 0.20]
+screening_coverage = [0.7, 0.9, 1.0]
+
+# Population setup
+total_population = 2463
+cluster_0_percentage = 0.14
+cluster_0_population = int(total_population * cluster_0_percentage)
+cluster_3_percentage = 0.09
+cluster_3_population = int(total_population * cluster_3_percentage)
+healthy_population = total_population - (cluster_0_population + cluster_3_population)
+
+# Scenario analysis
+results = []
+for cost in screening_cost_per_person:
+    for saving in early_detection_saving_per_case:
+        for risk in cluster_0_cancer_risk:
+            for coverage in screening_coverage:
+                # Cluster 0 only
+                screened_population_0 = int(cluster_0_population * coverage)
+                screening_cost_0 = screened_population_0 * cost
+                detected_cases_0 = int(screened_population_0 * risk)
+                total_savings_0 = detected_cases_0 * saving
+                net_savings_0 = total_savings_0 - screening_cost_0
+                results.append({
+                    "Scenario": "Cluster 0 Only",
+                    "Screening Cost Per Person": cost,
+                    "Detection Saving Per Case": saving,
+                    "Cancer Risk": risk,
+                    "Screening Coverage": coverage,
+                    "Screening Cost": screening_cost_0,
+                    "Detection Savings": total_savings_0,
+                    "Net Savings": net_savings_0
+                })
+
+                # Cluster 0 + Cluster 3
+                screened_population_03 = int((cluster_0_population + cluster_3_population) * coverage)
+                screening_cost_03 = screened_population_03 * cost
+                detected_cases_03 = int(screened_population_03 * risk)
+                total_savings_03 = detected_cases_03 * saving
+                net_savings_03 = total_savings_03 - screening_cost_03
+                results.append({
+                    "Scenario": "Cluster 0 + Cluster 3",
+                    "Screening Cost Per Person": cost,
+                    "Detection Saving Per Case": saving,
+                    "Cancer Risk": risk,
+                    "Screening Coverage": coverage,
+                    "Screening Cost": screening_cost_03,
+                    "Detection Savings": total_savings_03,
+                    "Net Savings": net_savings_03
+                })
+
+                # Universal Screening
+                screened_population_u = int(total_population * coverage)
+                screening_cost_u = screened_population_u * cost
+                detected_cases_u = int(screened_population_u * risk)
+                total_savings_u = detected_cases_u * saving
+                net_savings_u = total_savings_u - screening_cost_u
+                results.append({
+                    "Scenario": "Universal Screening",
+                    "Screening Cost Per Person": cost,
+                    "Detection Saving Per Case": saving,
+                    "Cancer Risk": risk,
+                    "Screening Coverage": coverage,
+                    "Screening Cost": screening_cost_u,
+                    "Detection Savings": total_savings_u,
+                    "Net Savings": net_savings_u
+                })
+
+# Convert results to DataFrame and save
+results_df = pd.DataFrame(results)
+results_df.to_csv("economic_scenario_analysis.csv", index=False)
+files.download("economic_scenario_analysis.csv")
+
+# ANOVA Analysis
+cost_cluster_0 = results_df[results_df["Scenario"] == "Cluster 0 Only"]["Screening Cost"]
+cost_cluster_3 = results_df[results_df["Scenario"] == "Cluster 0 + Cluster 3"]["Screening Cost"]
+cost_universal = results_df[results_df["Scenario"] == "Universal Screening"]["Screening Cost"]
+
+f_stat, p_value = f_oneway(cost_cluster_0, cost_cluster_3, cost_universal)
+print(f"ANOVA Results: F-statistic={f_stat:.2f}, p-value={p_value:.4f}")
+if p_value < 0.05:
+    print("Significant differences exist between screening strategies.")
+else:
+    print("No significant differences exist between screening strategies.")
+
+# Plotting results
+plot_data = results_df.groupby("Scenario")[["Screening Cost", "Detection Savings", "Net Savings"]].mean()
+
+fig, ax = plt.subplots(figsize=(10, 6))
+plot_data.plot(kind="bar", ax=ax, alpha=0.8)
+
+ax.set_title("Costs and Savings Across Screening Scenarios", fontsize=16)
+ax.set_ylabel("Cost ($)", fontsize=14)
+ax.set_xlabel("Screening Scenario", fontsize=14)
+ax.legend(["Screening Cost", "Detection Savings", "Net Savings"], fontsize=12)
+plt.tight_layout()
+plt.show()
